@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Atlas — Intelligence Platform</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-logo">▲</span>
+                <span class="brand-name">AI ATLAS</span>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="#/directory" class="menu-item active" id="menu-directory">
+                    <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    Company Directory
+                </a>
+                <a href="#/ask" class="menu-item" id="menu-ask">
+                    <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    Ask AI
+                </a>
+                <a href="#/watchlist" class="menu-item" id="menu-watchlist">
+                    <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                    Watchlist & Feed
+                </a>
+                <a href="#/admin" class="menu-item" id="menu-admin">
+                    <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Admin Dashboard
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="api-status" id="api-status-indicator">
+                    <span class="status-dot warning"></span>
+                    <span class="status-text">Checking API Connection...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="content-header">
+                <h1 id="page-title">Company Directory</h1>
+                <div class="header-actions" id="global-search-container">
+                    <!-- Dynamic details or user options -->
+                </div>
+            </header>
+
+            <!-- Screen: Directory -->
+            <section id="screen-directory" class="app-screen active">
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="dir-search" placeholder="Search companies, AI categories, use cases...">
+                    </div>
+                    
+                    <div class="filter-controls">
+                        <select id="filter-type">
+                            <option value="">All Company Types</option>
+                            <option value="Incumbent">Incumbent</option>
+                            <option value="NewCo">NewCo</option>
+                        </select>
+                        
+                        <select id="filter-maturity">
+                            <option value="">All Maturities</option>
+                            <option value="Mature">Mature</option>
+                            <option value="Scaling">Scaling</option>
+                            <option value="Emerging">Emerging / Early</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Segment Tabs / Horizontal Scroll -->
+                <div class="segment-tabs-container">
+                    <div class="segment-tabs" id="segment-tabs-list">
+                        <button class="segment-tab active" data-id="">All Segments</button>
+                        <!-- Dynamic segment pills -->
+                    </div>
+                </div>
+
+                <!-- Directory Grid -->
+                <div class="companies-grid" id="companies-grid-list">
+                    <!-- Dynamic company cards -->
+                    <div class="loading-placeholder">Loading directory...</div>
+                </div>
+            </section>
+
+            <!-- Screen: Ask AI -->
+            <section id="screen-ask" class="app-screen">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <div class="bot-info">
+                            <span class="bot-avatar">⚡</span>
+                            <div>
+                                <h3>Ask AI Grounded Assistant</h3>
+                                <p>Answers verified directly against dataset records and news sources</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-suggestions">
+                        <p class="suggestions-label">Try asking:</p>
+                        <div class="suggestions-buttons">
+                            <button class="suggest-btn">Which vendors solve packaging seal-integrity problems, and who are their German customers?</button>
+                            <button class="suggest-btn">What is the estimated revenue, maturity, and use cases of GEA Group AG?</button>
+                            <button class="suggest-btn">Find recent news about Marel and summarize their developments.</button>
+                            <button class="suggest-btn">What problems are mapped to Dairy Processing segment?</button>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-messages" id="chat-messages-box">
+                        <div class="chat-message bot">
+                            <div class="msg-bubble">
+                                Hello! I'm Ask AI. I am grounded on the German Food & Beverage AI dataset.
+                                Ask me anything about companies, problems, ROI benchmarks, and recent news.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <form class="chat-input-area" id="chat-form">
+                        <input type="text" id="chat-input" placeholder="Ask about companies, AI solutions, customer references..." required autocomplete="off">
+                        <button type="submit" class="chat-send-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Screen: Watchlist & Feed -->
+            <section id="screen-watchlist" class="app-screen">
+                <div class="watchlist-layout">
+                    <div class="watchlist-sidebar">
+                        <h2>My Watchlist</h2>
+                        <div class="watchlist-list" id="watchlist-companies-list">
+                            <!-- Dynamic list of followed companies -->
+                            <p class="empty-state">No followed companies yet. Follow companies from their profiles to see them here.</p>
+                        </div>
+                    </div>
+                    <div class="watchlist-feed">
+                        <h2>Aggregated News Feed</h2>
+                        <div class="news-feed-list" id="watchlist-news-feed">
+                            <!-- Dynamic combined news items -->
+                            <p class="empty-state">Follow companies to see a live aggregated news feed of recent developments.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen: Admin Dashboard -->
+            <section id="screen-admin" class="app-screen">
+                <div class="admin-tabs">
+                    <button class="admin-tab active" id="btn-admin-discover" onclick="switchAdminTab('discover')">AI Company Discovery</button>
+                    <button class="admin-tab" id="btn-admin-manage" onclick="switchAdminTab('manage')">Data Management</button>
+                </div>
+
+                <!-- Admin Tab: AI Company Discovery -->
+                <div class="admin-tab-content active" id="admin-discover-content">
+                    <div class="discovery-intro">
+                        <p>Research and discover new AI companies solving problems in specific sectors. Gemini will perform a live web search, draft structured company records, and collect URL evidence. You review and verify details before approving insertion into the database.</p>
+                    </div>
+
+                    <form class="discovery-form" id="discovery-search-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="disc-sector">F&B Sector / Problem Area</label>
+                                <input type="text" id="disc-sector" placeholder="e.g., Dairy Processing, Bakery, Waste reduction..." required>
+                            </div>
+                            <div class="form-group">
+                                <label for="disc-country">Target Country</label>
+                                <input type="text" id="disc-country" value="Germany" required>
+                            </div>
+                            <div class="form-group btn-group">
+                                <button type="submit" class="btn-primary" id="btn-run-discovery">
+                                    <span class="btn-text">Research & Discover Candidates</span>
+                                    <span class="btn-spinner hidden"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Discovery Status -->
+                    <div class="discovery-status hidden" id="discovery-status-box">
+                        <div class="status-spinner-container">
+                            <div class="spinner"></div>
+                            <p id="discovery-status-text">Gemini is searching the web and structuring company profiles...</p>
+                        </div>
+                    </div>
+
+                    <!-- Discovered Candidates Grid -->
+                    <div class="discovery-results hidden" id="discovery-results-box">
+                        <h2>Discovered Candidates</h2>
+                        <div class="candidates-list" id="discovered-candidates-list">
+                            <!-- Dynamic discovered company cards with edit/approve forms -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Tab: Data Management -->
+                <div class="admin-tab-content" id="admin-manage-content">
+                    <div class="data-manage-layout">
+                        <div class="data-form-box">
+                            <h2 id="data-form-title">Add New Company</h2>
+                            <form id="company-data-form">
+                                <input type="hidden" id="edit-company-id" value="">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="comp-name">Company Name *</label>
+                                        <input type="text" id="comp-name" required placeholder="e.g., Krones AG">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-country">Country *</label>
+                                        <input type="text" id="comp-country" required placeholder="e.g., Germany">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-category">AI Category</label>
+                                        <input type="text" id="comp-category" placeholder="e.g., Computer Vision Inspection">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-tags">F&B Segment IDs (Comma separated)</label>
+                                        <input type="text" id="comp-tags" placeholder="e.g., 1,2,9 (See Directory Segments)">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-presence">Germany Presence</label>
+                                        <input type="text" id="comp-presence" placeholder="e.g., LOCAL HQ — Düsseldorf">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-type">Company Type</label>
+                                        <select id="comp-type">
+                                            <option value="Incumbent">Incumbent</option>
+                                            <option value="NewCo">NewCo</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-funding">Funding Stage</label>
+                                        <input type="text" id="comp-funding" placeholder="e.g., Public (MDAX) or Series A">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-revenue">Est. Revenue</label>
+                                        <input type="text" id="comp-revenue" placeholder="e.g., €5.3B or $10M+">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-maturity">Maturity rating</label>
+                                        <input type="text" id="comp-maturity" placeholder="e.g., 4 — Mature or 3 — Scaling">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="comp-website">Website domain</label>
+                                        <input type="text" id="comp-website" placeholder="e.g., krones.com">
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="comp-usecases">F&B AI Use Cases</label>
+                                        <textarea id="comp-usecases" rows="2" placeholder="e.g., Fill-level vision inspection AI, Predictive maintenance"></textarea>
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="comp-customers">Top German F&B Customers</label>
+                                        <input type="text" id="comp-customers" placeholder="e.g., Coca-Cola Germany, Müller Dairy">
+                                    </div>
+                                    <div class="form-group full-width">
+                                        <label for="comp-evidence">Deployment Evidence</label>
+                                        <textarea id="comp-evidence" rows="2" placeholder="e.g., Bottling line AI inspection deployed at Coca-Cola DE plant"></textarea>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" id="btn-cancel-edit" style="display:none;">Cancel Edit</button>
+                                    <button type="submit" class="btn-primary" id="btn-save-company">Save Company</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="data-list-box">
+                            <h2>Existing Companies</h2>
+                            <div class="quick-company-search">
+                                <input type="text" id="manage-search" placeholder="Quick find company...">
+                            </div>
+                            <div class="manage-companies-list" id="admin-companies-list">
+                                <!-- Dynamic list of companies with Edit buttons -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Slide-over / Modal Detail Panel for Company Profile -->
+    <div class="profile-slideout" id="profile-panel">
+        <div class="slideout-overlay" id="profile-overlay"></div>
+        <div class="slideout-content">
+            <header class="slideout-header">
+                <button class="slideout-close" id="profile-close-btn">×</button>
+                <div class="slideout-title-area">
+                    <div class="title-row">
+                        <h2 id="profile-name">Company Name</h2>
+                        <button class="btn-follow" id="profile-follow-btn">
+                            <span class="follow-icon">☆</span>
+                            <span class="follow-text">Follow</span>
+                        </button>
+                    </div>
+                    <p id="profile-category-subtitle" class="subtitle">AI Category</p>
+                    <a id="profile-website-link" href="#" target="_blank" class="web-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="link-icon"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        <span id="profile-website-url">website.com</span>
+                    </a>
+                </div>
+            </header>
+
+            <nav class="slideout-tabs">
+                <button class="slideout-tab active" id="tab-overview" onclick="switchProfileTab('overview')">Overview</button>
+                <button class="slideout-tab" id="tab-problems" onclick="switchProfileTab('problems')">Problems Solved</button>
+                <button class="slideout-tab" id="tab-news" onclick="switchProfileTab('news')">Newsletter</button>
+            </nav>
+
+            <div class="slideout-body">
+                <!-- Tab: Overview -->
+                <div class="tab-panel active" id="panel-overview">
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <span class="info-label">Company Type</span>
+                            <span class="info-value" id="profile-type">-</span>
+                        </div>
+                        <div class="info-card">
+                            <span class="info-label">Maturity Rating</span>
+                            <span class="info-value" id="profile-maturity">-</span>
+                        </div>
+                        <div class="info-card">
+                            <span class="info-label">Funding Stage</span>
+                            <span class="info-value" id="profile-funding">-</span>
+                        </div>
+                        <div class="info-card">
+                            <span class="info-label">Est. Revenue</span>
+                            <span class="info-value" id="profile-revenue">-</span>
+                        </div>
+                        <div class="info-card full-width">
+                            <span class="info-label">German Presence</span>
+                            <span class="info-value" id="profile-presence">-</span>
+                        </div>
+                        <div class="info-card full-width">
+                            <span class="info-label">AI Use Cases</span>
+                            <div class="info-bullets" id="profile-usecases">-</div>
+                        </div>
+                        <div class="info-card full-width">
+                            <span class="info-label">Top German F&B Customers</span>
+                            <span class="info-value" id="profile-customers">-</span>
+                        </div>
+                        <div class="info-card full-width highlight">
+                            <span class="info-label">Top Deployment Evidence</span>
+                            <blockquote class="evidence-quote" id="profile-evidence">-</blockquote>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Problems Solved -->
+                <div class="tab-panel" id="panel-problems">
+                    <div class="problems-list" id="profile-problems-list">
+                        <!-- Dynamic list of problems solved -->
+                    </div>
+                </div>
+
+                <!-- Tab: Newsletter -->
+                <div class="tab-panel" id="panel-news">
+                    <div class="newsletter-header">
+                        <h3>Automated News Feed</h3>
+                        <button class="btn-refresh-news" id="btn-refresh-news">
+                            <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            Refresh Live News
+                        </button>
+                    </div>
+                    <div class="news-list" id="profile-news-list">
+                        <!-- Dynamic list of news items -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-box"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
