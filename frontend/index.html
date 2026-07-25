@@ -147,7 +147,13 @@
                         </div>
                     </div>
                     <div class="watchlist-feed">
-                        <h2>Aggregated News Feed</h2>
+                        <div class="feed-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                            <h2 style="margin-bottom:0;">Aggregated News Feed</h2>
+                            <div class="feed-toggle-buttons" style="display:flex; gap:0.5rem;">
+                                <button class="segment-tab active" id="feed-toggle-watched" style="padding:0.4rem 0.8rem; font-size:0.8rem;">Watchlist Only</button>
+                                <button class="segment-tab" id="feed-toggle-all" style="padding:0.4rem 0.8rem; font-size:0.8rem;">All News</button>
+                            </div>
+                        </div>
                         <div class="news-feed-list" id="watchlist-news-feed">
                             <!-- Dynamic combined news items -->
                             <p class="empty-state">Follow companies to see a live aggregated news feed of recent developments.</p>
@@ -161,6 +167,7 @@
                 <div class="admin-tabs">
                     <button class="admin-tab active" id="btn-admin-discover" onclick="switchAdminTab('discover')">AI Company Discovery</button>
                     <button class="admin-tab" id="btn-admin-manage" onclick="switchAdminTab('manage')">Data Management</button>
+                    <button class="admin-tab" id="btn-admin-logs" onclick="switchAdminTab('logs')">Auto-Ingestion Logs</button>
                 </div>
 
                 <!-- Admin Tab: AI Company Discovery -->
@@ -202,6 +209,30 @@
                         <div class="candidates-list" id="discovered-candidates-list">
                             <!-- Dynamic discovered company cards with edit/approve forms -->
                         </div>
+                    </div>
+                </div>
+
+                <!-- Admin Tab: Auto-Ingestion Logs -->
+                <div class="admin-tab-content" id="admin-logs-content">
+                    <div class="discovery-intro">
+                        <p>This log records companies that were automatically discovered, verified, and ingested into the database because their confidence score met or exceeded the 90% threshold.</p>
+                    </div>
+                    <div class="logs-table-container">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Company Name</th>
+                                    <th>Confidence</th>
+                                    <th>Segment IDs</th>
+                                    <th>AI Category</th>
+                                    <th>Website</th>
+                                    <th>German Presence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auto-logs-tbody">
+                                <tr><td colspan="6" class="empty-state">No auto-ingested companies found yet.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

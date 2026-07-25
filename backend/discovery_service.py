@@ -16,7 +16,7 @@ def load_env():
                         parts = line.split("=", 1)
                         if len(parts) == 2:
                             k, v = parts[0].strip(), parts[1].strip()
-                            if k and v and k not in os.environ:
+                            if k and v:
                                 os.environ[k] = v
             break
 
@@ -28,11 +28,10 @@ if GEMINI_API_KEY:
 
 def is_gemini_available():
     global GEMINI_API_KEY
-    if not GEMINI_API_KEY:
-        load_env()
-        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-        if GEMINI_API_KEY:
-            genai.configure(api_key=GEMINI_API_KEY)
+    load_env()
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
     return bool(GEMINI_API_KEY)
 
 def discover_companies(sector, country):
@@ -69,7 +68,7 @@ def discover_companies(sector, country):
         f"- 'maturity': Maturity tag (e.g. '4 — Mature' or '3 — Scaling' or '2 — Emerging')\n"
         f"- 'deployment_evidence': Verified deployment evidence description (e.g. 'Implemented AI sorting at German potato plant, reducing waste by 25%')\n"
         f"- 'website': Website domain (e.g. 'company.com')\n"
-        f"- 'confidence': Confidence level: 'High', 'Medium', or 'Low'\n"
+        f"- 'confidence_score': Numeric confidence score from 0 to 100 representing how verifiable and relevant the company profile is based on evidence (e.g. 95)\n"
         f"- 'evidence': A list of source objects, each with 'source_url' (absolute link starting with http) and 'snippet' (verbatim quote or detail showing proof of the company and its AI use case)\n\n"
         f"Return the final output ONLY as a valid JSON object matching this schema:\n"
         f"{{\n"
@@ -86,7 +85,7 @@ def discover_companies(sector, country):
         )
         
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.5-flash",
+            model_name="models/gemini-2.0-flash",
             tools=[google_search_tool]
         )
         
@@ -110,3 +109,65 @@ def discover_companies(sector, country):
             "success": False,
             "error": str(e)
         }
+
+def run_auto_discovery(sector, country="Germany"):
+    """Researches companies and automatically ingests those with a confidence_score >= 90."""
+    print(f"Running automated company discovery for sector: '{sector}', country: '{country}'...")
+    res = discover_companies(sector, country)
+    if not res.get("success", False):
+        print(f"Auto-discovery failed: {res.get('error')}")
+        return 0
+        
+    candidates = res.get("candidates", [])
+    ingested_count = 0
+    
+    from database import add_company
+    from news_service import fetch_news_for_company
+    from rag_service import build_faiss_index
+    
+    for cand in candidates:
+        score = cand.get("confidence_score", 0)
+        # Handle string fallback cases if model outputs text
+        if isinstance(score, str):
+            if score.lower() == "high":
+                score = 95
+            elif score.lower() == "medium":
+                score = 75
+            else:
+                score = 50
+                
+        if score >= 90:
+            print(f"Auto-ingesting high confidence candidate ({score}%): {cand['name']}")
+            company_data = {
+                "name": cand.get("name"),
+                "country": cand.get("country"),
+                "ai_category": cand.get("ai_category"),
+                "seg_tags": cand.get("seg_tags"),
+                "germany_presence": cand.get("germany_presence"),
+                "company_type": cand.get("company_type"),
+                "use_cases": cand.get("use_cases"),
+                "customers": cand.get("customers"),
+                "funding": cand.get("funding"),
+                "revenue": cand.get("revenue"),
+                "maturity": cand.get("maturity"),
+                "deployment_evidence": cand.get("deployment_evidence"),
+                "website": cand.get("website"),
+                "ingestion_source": "Auto-Discovered",
+                "confidence_score": score
+            }
+            
+            try:
+                new_id = add_company(company_data)
+                ingested_count += 1
+                
+                # Fetch initial news
+                print(f"Fetching news for auto-ingested company: {cand['name']}")
+                fetch_news_for_company(new_id, max_results=3)
+            except Exception as e:
+                print(f"Error auto-ingesting company {cand['name']}: {e}")
+                
+    if ingested_count > 0:
+        print(f"Successfully auto-ingested {ingested_count} companies. Rebuilding FAISS index...")
+        build_faiss_index()
+        
+    return ingested_count

@@ -13,7 +13,8 @@ let state = {
     newsFeed: [],
     activeProfileId: null,
     activeProfileTab: 'overview',
-    discoveredCandidates: []
+    discoveredCandidates: [],
+    feedFilter: 'watched' // 'watched' or 'all'
 };
 
 // Start application
@@ -182,6 +183,24 @@ function setupEventListeners() {
         manageSearch.addEventListener('input', debounce((e) => {
             renderAdminCompaniesList(e.target.value);
         }, 200));
+    }
+    
+    // Feed Toggle buttons
+    const toggleWatched = document.getElementById('feed-toggle-watched');
+    const toggleAll = document.getElementById('feed-toggle-all');
+    if (toggleWatched && toggleAll) {
+        toggleWatched.addEventListener('click', () => {
+            toggleWatched.classList.add('active');
+            toggleAll.classList.remove('active');
+            state.feedFilter = 'watched';
+            loadWatchlistScreen();
+        });
+        toggleAll.addEventListener('click', () => {
+            toggleAll.classList.add('active');
+            toggleWatched.classList.remove('active');
+            state.feedFilter = 'all';
+            loadWatchlistScreen();
+        });
     }
 }
 
@@ -625,7 +644,7 @@ async function handleChatSubmit(e) {
         
         if (res.ok) {
             const data = await res.json();
-            renderChatMessage(data.answer, 'bot', data.sources);
+            renderChatMessage(data.answer, 'bot', data.sources, data.steps);
         } else {
             renderChatMessage('Sorry, I encountered an error answering your question.', 'bot error');
         }
@@ -635,7 +654,7 @@ async function handleChatSubmit(e) {
     }
 }
 
-function renderChatMessage(text, sender, sources = []) {
+function renderChatMessage(text, sender, sources = [], steps = []) {
     const box = document.getElementById('chat-messages-box');
     if (!box) return null;
     
@@ -647,6 +666,36 @@ function renderChatMessage(text, sender, sources = []) {
     
     if (sender.includes('bot') && !sender.includes('typing')) {
         bubble.innerHTML = parseMarkdown(text);
+        
+        // If reasoning steps exist, add collapsible agent thought block
+        if (steps && steps.length > 0) {
+            const stepsContainer = document.createElement('div');
+            stepsContainer.className = 'agent-steps-container';
+            
+            const title = document.createElement('div');
+            title.className = 'agent-steps-title';
+            title.innerHTML = '⚡ Agent Reasoning Trace (Click to toggle)';
+            title.style.cursor = 'pointer';
+            
+            const list = document.createElement('div');
+            list.className = 'agent-steps-list';
+            list.style.display = 'none'; // collapsed by default
+            
+            steps.forEach(step => {
+                const item = document.createElement('div');
+                item.className = 'agent-step-item';
+                item.textContent = `→ ${step.detail}`;
+                list.appendChild(item);
+            });
+            
+            title.addEventListener('click', () => {
+                list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            });
+            
+            stepsContainer.appendChild(title);
+            stepsContainer.appendChild(list);
+            bubble.insertBefore(stepsContainer, bubble.firstChild);
+        }
         
         // Add dynamic listener for company route links within chat
         bubble.querySelectorAll('a').forEach(link => {
@@ -735,28 +784,30 @@ async function loadWatchlistScreen() {
             // Render Watchlist List
             if (watched.length === 0) {
                 listContainer.innerHTML = '<p class="empty-state">No watched companies. Tap the Star on any profile to follow.</p>';
-                feedContainer.innerHTML = '<p class="empty-state">Unified feed is empty because you aren\'t following any vendors.</p>';
-                return;
+            } else {
+                listContainer.innerHTML = '';
+                watched.forEach(c => {
+                    const item = document.createElement('div');
+                    item.className = 'watchlist-company-item';
+                    item.textContent = c.name;
+                    item.addEventListener('click', () => {
+                        window.location.hash = `#/company/${c.id}`;
+                    });
+                    listContainer.appendChild(item);
+                });
             }
             
-            listContainer.innerHTML = '';
             const watchedIds = new Set(watched.map(w => w.id));
             
-            watched.forEach(c => {
-                const item = document.createElement('div');
-                item.className = 'watchlist-company-item';
-                item.textContent = c.name;
-                item.addEventListener('click', () => {
-                    window.location.hash = `#/company/${c.id}`;
-                });
-                listContainer.appendChild(item);
-            });
-            
-            // Filter news for watched companies only
-            const filteredNews = allNews.filter(n => watchedIds.has(n.company_id));
+            // Filter news depending on toggle state
+            const filteredNews = (state.feedFilter === 'all')
+                ? allNews
+                : allNews.filter(n => watchedIds.has(n.company_id));
             
             if (filteredNews.length === 0) {
-                feedContainer.innerHTML = '<p class="empty-state">No news found for watched companies. Refresh news on company profiles to fetch articles.</p>';
+                feedContainer.innerHTML = state.feedFilter === 'all'
+                    ? '<p class="empty-state">No news found in the database yet.</p>'
+                    : '<p class="empty-state">No news found for watched companies. Refresh news on company profiles to fetch articles.</p>';
                 return;
             }
             
@@ -794,6 +845,10 @@ function switchAdminTab(tabId) {
         content.classList.remove('active');
     });
     document.getElementById(`admin-${tabId}-content`).classList.add('active');
+    
+    if (tabId === 'logs') {
+        renderAutoIngestedLogs();
+    }
 }
 
 // AI Discovery Submit Handler
@@ -1010,6 +1065,7 @@ function rejectCandidate(idx) {
 async function loadAdminScreen() {
     // Fill the directory lists in manual console
     renderAdminCompaniesList();
+    renderAutoIngestedLogs();
 }
 
 function renderAdminCompaniesList(search = '') {
@@ -1194,4 +1250,34 @@ function parseMarkdown(text) {
     html = html.replace(/\n/g, '<br>');
     
     return html;
+}
+
+function renderAutoIngestedLogs() {
+    const tbody = document.getElementById('auto-logs-tbody');
+    if (!tbody) return;
+    
+    // Filter companies with ingestion_source === 'Auto-Discovered'
+    const autoCompanies = state.companies.filter(c => c.ingestion_source === 'Auto-Discovered');
+    
+    if (autoCompanies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="text-align: center; padding: 2rem;">No auto-ingested companies found yet.</td></tr>';
+        return;
+    }
+    
+    // Sort by ID descending (latest first)
+    autoCompanies.sort((a, b) => b.id - a.id);
+    
+    tbody.innerHTML = '';
+    autoCompanies.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong><a href="/#/company/${c.id}">${c.name}</a></strong></td>
+            <td><span class="confidence-badge">${c.confidence_score}%</span></td>
+            <td>${c.seg_tags || 'None'}</td>
+            <td>${c.ai_category || 'N/A'}</td>
+            <td><a href="https://${c.website}" target="_blank">${c.website || 'N/A'}</a></td>
+            <td>${c.germany_presence || 'N/A'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }

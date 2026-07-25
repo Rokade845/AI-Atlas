@@ -5,7 +5,7 @@ import urllib.parse
 from datetime import datetime
 import google.generativeai as genai
 import json
-from database import get_db_connection, add_news_item
+from database import get_db_connection, add_news_item, get_processed_url, add_processed_url
 
 # Local env loader helper
 def load_env():
@@ -19,7 +19,7 @@ def load_env():
                         parts = line.split("=", 1)
                         if len(parts) == 2:
                             k, v = parts[0].strip(), parts[1].strip()
-                            if k and v and k not in os.environ:
+                            if k and v:
                                 os.environ[k] = v
             break
 
@@ -31,71 +31,70 @@ if GEMINI_API_KEY:
 
 def is_gemini_available():
     global GEMINI_API_KEY
-    if not GEMINI_API_KEY:
-        load_env()
-        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-        if GEMINI_API_KEY:
-            genai.configure(api_key=GEMINI_API_KEY)
+    load_env()
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
     return bool(GEMINI_API_KEY)
 
-def check_article_relevance(company_name, headline, description):
-    """Use Gemini to determine if a news item is relevant to the specific company and not a false match."""
+def evaluate_article(company_name, headline, snippet):
+    """Evaluate article relevance and generate summary in a single call to save Gemini Free Tier quota."""
+    # 1. Deterministic pre-filtering (Free Tier optimization)
+    clean_company = company_name.lower().replace(" ag", "").replace(" gmbh", "").replace(" se", "").replace("& co kg", "").strip()
+    headline_lower = headline.lower()
+    snippet_lower = snippet.lower() if snippet else ""
+    
+    # If clean name is not found anywhere in headline or snippet, discard immediately
+    if clean_company not in headline_lower and clean_company not in snippet_lower:
+        print(f"[{company_name}] Pre-filtered out article: {headline}")
+        return {"is_relevant": False, "summary": "", "called_api": False}
+    
     if not is_gemini_available():
-        # Fallback: simple case-insensitive substring search
-        c_name_lower = company_name.lower().replace(" ag", "").replace(" gmbh", "").strip()
-        headline_lower = headline.lower()
-        desc_lower = description.lower() if description else ""
-        return c_name_lower in headline_lower or c_name_lower in desc_lower
+        return {"is_relevant": True, "summary": snippet[:150] if snippet else "No summary available.", "called_api": False}
         
     prompt = (
-        f"You are an AI analyst evaluating news relevancy.\n"
+        f"You are an AI market analyst evaluating news articles for relevance and summarizing them.\n"
         f"Company Name: {company_name}\n"
-        f"We are looking for news specifically about this company, which operates in the areas of "
-        f"artificial intelligence, food/beverage technology, processing machinery, food quality, or cold chain logistics.\n\n"
+        f"We are looking for news specifically about this company, operating in food/beverage technology, processing machinery, packaging AI, food quality, or cold chain logistics.\n\n"
         f"News Article Details:\n"
         f"- Headline: {headline}\n"
-        f"- Snippet: {description}\n\n"
-        f"Is this article directly about '{company_name}' and relevant to its business? "
-        f"Beware of name collisions (e.g., general terms like 'picnic', or unrelated entities with similar names).\n"
-        f"Return your decision in JSON format with keys:\n"
+        f"- Snippet: {snippet}\n\n"
+        f"Task:\n"
+        f"1. Determine if this article is directly about '{company_name}' and relevant to its business. (Beware of false matches/name collisions).\n"
+        f"2. If it is relevant, generate a high-quality, professional, concise one-sentence summary (maximum 25 words).\n\n"
+        f"Return a JSON object with keys:\n"
         f"- 'is_relevant': boolean\n"
-        f"- 'explanation': string (brief, 1 sentence explaining decision)\n"
-        f"Only return JSON."
+        f"- 'explanation': string (1-sentence explanation of decision)\n"
+        f"- 'summary': string (the summary if relevant; otherwise empty string)\n"
+        f"Return ONLY valid JSON."
     )
     
-    try:
-        model = genai.GenerativeModel("models/gemini-3.5-flash")
-        response = model.generate_content(
-            prompt, 
-            generation_config={"response_mime_type": "application/json"}
-        )
-        data = json.loads(response.text.strip())
-        return data.get('is_relevant', False)
-    except Exception as e:
-        print(f"Relevance check error for {company_name}: {e}")
-        # Default fallback to true if API fails, to ensure we don't block all news
-        c_name_lower = company_name.lower().replace(" ag", "").replace(" gmbh", "").strip()
-        return c_name_lower in headline.lower()
-
-def generate_news_summary(company_name, headline, description):
-    """Generate a high-quality one-sentence summary using Gemini."""
-    if not is_gemini_available():
-        return description[:150] if description else "No summary available."
-        
-    prompt = (
-        f"Create a professional, concise one-sentence summary (max 25 words) for this news item about the company '{company_name}':\n"
-        f"Headline: {headline}\n"
-        f"Snippet: {description}\n"
-        f"Summary:"
-    )
-    
-    try:
-        model = genai.GenerativeModel("models/gemini-3.5-flash")
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        print(f"Summary generation error: {e}")
-        return description[:150] if description else "No summary available."
+    # Call Gemini with retry logic
+    max_retries = 3
+    base_delay = 10
+    for attempt in range(max_retries):
+        try:
+            model = genai.GenerativeModel("models/gemini-2.0-flash")
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            res_text = response.text.strip()
+            data = json.loads(res_text)
+            return {
+                "is_relevant": data.get("is_relevant", False),
+                "summary": data.get("summary", ""),
+                "called_api": True
+            }
+        except Exception as e:
+            print(f"Gemini API attempt {attempt+1} failed for {company_name}: {e}")
+            if attempt < max_retries - 1:
+                import time
+                sleep_time = base_delay * (2 ** attempt)
+                print(f"Rate limited or error. Sleeping {sleep_time} seconds before retry...")
+                time.sleep(sleep_time)
+            else:
+                return {"is_relevant": False, "summary": "", "called_api": True}
 
 def fetch_news_for_company(company_id, max_results=3):
     """Fetch news for a company from Google News RSS, filter and save to DB."""
@@ -109,8 +108,6 @@ def fetch_news_for_company(company_id, max_results=3):
     company_name = company_row['name']
     print(f"Fetching news for {company_name}...")
     
-    # We construct a query containing company name and sector keywords to focus results
-    # We search for company name as a phrase, and keywords
     search_query = f'"{company_name}" AND (AI OR food OR beverage OR technology OR processing)'
     encoded_query = urllib.parse.quote(search_query)
     rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
@@ -124,7 +121,7 @@ def fetch_news_for_company(company_id, max_results=3):
         root = ET.fromstring(response.content)
         items = root.findall(".//item")
         
-        # Limit evaluation to the top 5 articles to conserve API quota
+        # Limit evaluation to the top 5 articles
         items_to_evaluate = items[:5]
         
         saved_count = 0
@@ -141,11 +138,10 @@ def fetch_news_for_company(company_id, max_results=3):
             description_elem = item.find("description")
             description = description_elem.text if description_elem is not None else ""
             
-            # Clean headline (often ends with ' - Source Name')
+            # Clean headline
             if " - " in headline:
                 headline = headline.rsplit(" - ", 1)[0]
                 
-            # Convert pub_date_str (e.g. "Tue, 14 Jul 2026 12:00:00 GMT") to a cleaner format (YYYY-MM-DD)
             try:
                 dt = datetime.strptime(pub_date_str, "%a, %d %b %Y %H:%M:%S %Z")
                 pub_date = dt.strftime("%Y-%m-%d")
@@ -160,17 +156,28 @@ def fetch_news_for_company(company_id, max_results=3):
             if exists:
                 continue
                 
-            # 2. Relevance Filtering
-            is_relevant = check_article_relevance(company_name, headline, description)
-            time.sleep(1.5)  # Rate limit safety delay
+            # 2. Check processed_news_urls Cache (Free Tier Optimization)
+            cached = get_processed_url(url)
+            if cached is not None:
+                is_relevant = cached["is_relevant"]
+                summary = cached["summary"]
+                print(f"Cached hit for URL: {url} -> Relevant: {is_relevant}")
+            else:
+                # 3. Relevance Filtering & Summarization combined (Gemini Call)
+                eval_result = evaluate_article(company_name, headline, description)
+                is_relevant = eval_result["is_relevant"]
+                summary = eval_result["summary"]
+                
+                # Save to URL Cache
+                add_processed_url(url, is_relevant, summary)
+                
+                # Free Tier Delay only on actual Gemini Call
+                if eval_result.get("called_api", True):
+                    time.sleep(5.0)
+                    
             if not is_relevant:
-                print(f"Skipping irrelevant article: {headline}")
                 continue
                 
-            # 3. Generate Summary
-            summary = generate_news_summary(company_name, headline, description)
-            time.sleep(1.5)  # Rate limit safety delay
-            
             # 4. Save to DB
             news_id = add_news_item(company_id, headline, source, pub_date, summary, url)
             if news_id:
@@ -188,28 +195,32 @@ def fetch_news_for_company(company_id, max_results=3):
         print(f"Error fetching news for {company_name}: {e}")
         return 0
 
-def refresh_all_news():
-    """Fetch news for watchlisted companies only to conserve API quota."""
+def refresh_all_news(limit=10):
+    """Fetch news for a random batch of companies to conserve API quota and avoid long runtimes."""
     conn = get_db_connection()
-    # Query only watchlisted companies to avoid API quota issues
-    companies = conn.execute("""
-        SELECT c.id, c.name 
-        FROM watchlist w
-        JOIN companies c ON w.company_id = c.id
-    """).fetchall()
+    companies = conn.execute("SELECT id, name FROM companies").fetchall()
     conn.close()
     
     if not companies:
-        print("No companies in watchlist. Skipping automated news refresh.")
+        print("No companies to monitor.")
         return 0
         
-    total_added = 0
+    import random
     import time
-    for c in companies:
-        added = fetch_news_for_company(c['id'])
-        total_added += added
-        # Sleep between company fetches to prevent token exhaustion
-        time.sleep(2)
-        
+    
+    # Randomly select a batch of companies to monitor in this turn
+    batch = random.sample(companies, min(limit, len(companies)))
+    
+    total_added = 0
+    print(f"Starting background news refresh for batch of {len(batch)} companies...")
+    for c in batch:
+        try:
+            added = fetch_news_for_company(c['id'], max_results=2)
+            total_added += added
+            # Sleep between company fetches to prevent rate limit spikes
+            time.sleep(2.0)
+        except Exception as e:
+            print(f"Error in background update for {c['name']}: {e}")
+            
     print(f"News refresh completed. Added a total of {total_added} articles.")
     return total_added

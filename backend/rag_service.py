@@ -24,7 +24,7 @@ def load_env():
                         parts = line.split("=", 1)
                         if len(parts) == 2:
                             k, v = parts[0].strip(), parts[1].strip()
-                            if k and v and k not in os.environ:
+                            if k and v:
                                 os.environ[k] = v
             break
 
@@ -40,12 +40,10 @@ indexed_items = [] # list of dicts mapping index rows to DB entities
 
 def get_gemini_client():
     global GEMINI_API_KEY
-    if not GEMINI_API_KEY:
-        # Retry loading env in case it was written later
-        load_env()
-        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-        if GEMINI_API_KEY:
-            genai.configure(api_key=GEMINI_API_KEY)
+    load_env()
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
     return bool(GEMINI_API_KEY)
 
 def get_embedding(text):
@@ -322,30 +320,20 @@ def extract_mentioned_companies(query):
             
     return matches
 
-def ask_ai(query):
-    """Answer natural language queries using hybrid search + Gemini."""
-    if not get_gemini_client():
-        return {
-            "answer": "Gemini API key is not configured. Please set the `GEMINI_API_KEY` in the `backend/.env` file.",
-            "sources": []
-        }
-        
-    # 1. Direct Context Extraction (Entity-based)
-    mentioned_companies = extract_mentioned_companies(query)
+def query_local_knowledge_base(search_query: str) -> str:
+    """Useful to search local database records and FAISS vector index for information about companies, sectors, problems, and ROI benchmarks."""
+    mentioned_companies = extract_mentioned_companies(search_query)
     direct_context = []
-    sources = []
     
     conn = get_db_connection()
+    cursor = conn.cursor()
     
     for c in mentioned_companies:
-        # Load the complete company profile with solved problems & news
-        cursor = conn.cursor()
         company_row = cursor.execute("SELECT * FROM companies WHERE id = ?", (c['id'],)).fetchone()
         if company_row:
             company = dict(company_row)
-            # Format detailed company text for 100% round-trip fidelity
             company_text = (
-                f"### COMPANY PROFILE: {company['name']}\n"
+                f"### COMPANY PROFILE: {company['name']} (ID: {company['id']})\n"
                 f"- **Country**: {company['country']}\n"
                 f"- **AI Category**: {company['ai_category']}\n"
                 f"- **Segment Tags**: {company['seg_tags']}\n"
@@ -358,15 +346,12 @@ def ask_ai(query):
                 f"- **Maturity**: {company['maturity']}\n"
                 f"- **Deployment Evidence**: {company['deployment_evidence']}\n"
                 f"- **Website**: [{company['website']}](https://{company['website']})\n"
+                f"- **Confidence Score**: {company.get('confidence_score', 100)}%\n"
+                f"- **Ingestion Source**: {company.get('ingestion_source', 'CSV Seed')}\n"
             )
             direct_context.append(company_text)
-            sources.append({
-                "type": "database_profile",
-                "title": f"{company['name']} Directory Profile",
-                "link": f"/#/company/{company['id']}"
-            })
             
-            # Fetch recent news for context
+            # Fetch recent news
             news_items = cursor.execute("SELECT headline, source, publication_date, url, summary FROM news_items WHERE company_id = ? LIMIT 3", (company['id'],)).fetchall()
             for n in news_items:
                 n_text = (
@@ -377,19 +362,13 @@ def ask_ai(query):
                     f"- Link: {n['url']}"
                 )
                 direct_context.append(n_text)
-                sources.append({
-                    "type": "news_article",
-                    "title": f"News: {n['headline']}",
-                    "link": n['url']
-                })
                 
-    # 2. Vector Context (FAISS Search)
-    vector_results = search_index(query, k=6)
+    # Vector Context
+    vector_results = search_index(search_query, k=6)
     vector_context = []
     
     for r in vector_results:
         item = r['item']
-        # Avoid duplicate context if already added in direct lookup
         is_duplicate = False
         if item['type'] == 'company':
             for c in mentioned_companies:
@@ -399,68 +378,244 @@ def ask_ai(query):
         if not is_duplicate:
             vector_context.append(f"### Chunk ({item['type'].upper()}): {item['name']}\n{item['text']}")
             
-            # Add sources
-            if item['type'] == 'company':
-                sources.append({
-                    "type": "database_profile",
-                    "title": f"{item['name']} Profile",
-                    "link": f"/#/company/{item['id']}"
-                })
-            elif item['type'] == 'problem':
-                sources.append({
-                    "type": "problem_statement",
-                    "title": f"Problem: {item['name']}",
-                    "link": f"/#/problems"
-                })
-            elif item['type'] == 'mapping':
-                sources.append({
-                    "type": "problem_mapping",
-                    "title": f"ROI Mapping: {item['name']}",
-                    "link": f"/#/problems"
-                })
-            elif item['type'] == 'news':
-                # Get URL
-                news_url = cursor.execute("SELECT url FROM news_items WHERE id = ?", (item['id'],)).fetchone()
-                sources.append({
-                    "type": "news_article",
-                    "title": f"News: {item['name']}",
-                    "link": news_url[0] if news_url else "#"
-                })
-                
     conn.close()
     
-    # 3. Build Prompt
     context_str = "\n\n".join(direct_context + vector_context)
+    return context_str if context_str else "No relevant information found in the local knowledge base."
+
+def query_web_search(search_query: str) -> str:
+    """Useful to search the web for recent news, articles, and general information outside the local database."""
+    if not get_gemini_client():
+        return "Gemini API key not configured."
+        
+    try:
+        from google.generativeai import types
+        google_search_tool = types.protos.Tool(
+            google_search=types.protos.Tool.GoogleSearch()
+        )
+        model = genai.GenerativeModel(
+            model_name="models/gemini-2.0-flash",
+            tools=[google_search_tool]
+        )
+        prompt = (
+            f"You are a web search assistant. Search the web for information regarding: '{search_query}'.\n"
+            f"Provide a summary of the facts found, along with citations and URLs. Be objective and concise."
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Web search tool execution failed: {e}")
+        return f"Error executing web search: {e}"
+
+def trigger_company_discovery(sector: str, country: str = "Germany") -> str:
+    """Useful to discover and profile new AI companies in a specific sector and country. High confidence candidates are automatically saved to the database."""
+    try:
+        from discovery_service import run_auto_discovery
+        count = run_auto_discovery(sector, country)
+        return (
+            f"Completed automated company discovery for sector '{sector}' in country '{country}'. "
+            f"Found and automatically ingested {count} new companies with confidence >= 90% into the database. "
+            f"The vector index was rebuilt, and these companies are now queryable."
+        )
+    except Exception as e:
+        print(f"Auto discovery tool execution failed: {e}")
+        return f"Error running auto company discovery: {e}"
+
+def ask_ai(query):
+    """Answer natural language queries using a reasoning agent loop with tools."""
+    if not get_gemini_client():
+        return {
+            "answer": "Gemini API key is not configured. Please set the `GEMINI_API_KEY` in the `backend/.env` file.",
+            "sources": [],
+            "steps": []
+        }
+        
+    # Map of tools
+    tool_map = {
+        "query_local_knowledge_base": query_local_knowledge_base,
+        "query_web_search": query_web_search,
+        "trigger_company_discovery": trigger_company_discovery
+    }
     
-    prompt = (
-        "You are 'Ask AI', the grounded intelligence assistant of the AI Atlas platform.\n"
-        "Your task is to answer user queries using ONLY the verified context below. You must adhere to these rules:\n\n"
-        "RULES:\n"
-        "1. Round-Trip Fidelity: For any fact about a company's funding, revenue, maturity, customers, use cases, or deployment evidence, "
-        "your answer must exactly match the values in the context. Do not invent or approximate.\n"
-        "2. Grounding: Answer ONLY using facts present in the Context. If the information is not in the context, state: "
-        "'I do not have this information in my knowledge base.' do not answer using general LLM knowledge or guess.\n"
-        "3. Citations: When you make a claim, cite the source. For companies, link to their profile (e.g. `[GEA Group AG](/#/company/2)`). "
-        "For news items, link to the article URL (e.g. `[Headline](URL)`).\n"
-        "4. Output format: Synthesized, natural and direct response in professional English. Use Markdown tables or bullet lists for clarity where appropriate.\n\n"
-        f"CONTEXT:\n{context_str}\n\n"
-        f"USER QUERY: {query}\n\n"
-        "YOUR GROUNDED RESPONSE:"
+    system_instruction = (
+        "You are 'Ask AI', the advanced agentic intelligence assistant of the AI Atlas platform.\n"
+        "You help users analyze companies, F&B sectors, problems, and ROI benchmarks.\n"
+        "You have access to tools to search the local database/vector store, search the web, or trigger company discovery.\n\n"
+        "CRITICAL RULES:\n"
+        "1. Exact Row Grounding: For specific profile attributes of database companies (funding, revenue, maturity, website, customers, use cases), "
+        "you MUST query the local knowledge base first. Your final answer must match database values with 100% round-trip fidelity. Do not invent or approximate.\n"
+        "2. General Knowledge / Web Search: If the query is general or refers to companies/facts not in the local database, "
+        "use `query_web_search` to find relevant info. Clearly mention that the answer is based on external web research.\n"
+        "3. Action Execution: If the user asks you to discover new companies, find new startups, or scan a new sector, "
+        "call `trigger_company_discovery` to run the discovery engine. Summarize what companies were automatically ingested vs ignored.\n"
+        "4. Citations: Always provide markdown links. For companies in our database, format as `[Company Name](/#/company/ID)` (e.g. `[GEA Group AG](/#/company/2)`). "
+        "For news or web links, cite their exact URLs.\n"
+        "5. Professional Presentation: Synthesize answers clearly in professional English. Use tables/bullet points for comparative parameters."
     )
     
-    # Call Gemini
-    model = genai.GenerativeModel("models/gemini-3.5-flash")
-    response = model.generate_content(prompt)
+    from google.generativeai.types import content_types
     
-    # Deduplicate sources based on link
-    unique_sources = []
+    # Initialize conversation history
+    chat_history = [
+        {"role": "user", "parts": [query]}
+    ]
+    
+    steps = []
+    max_iterations = 5
+    
+    for i in range(max_iterations):
+        try:
+            model = genai.GenerativeModel(
+                model_name="models/gemini-2.0-flash",
+                tools=list(tool_map.values()),
+                system_instruction=system_instruction
+            )
+            
+            response = model.generate_content(chat_history)
+            
+            # Record assistant content
+            content = response.candidates[0].content
+            chat_history.append(content)
+            
+            # Find function calls
+            function_calls = []
+            for part in content.parts:
+                if hasattr(part, "function_call") and part.function_call:
+                    function_calls.append(part.function_call)
+                    
+            if not function_calls:
+                # No more function calls, agent is finished!
+                break
+                
+            response_parts = []
+            for call in function_calls:
+                name = call.name
+                args = dict(call.args)
+                
+                step_detail = f"Invoked `{name}` with arguments: {json.dumps(args)}"
+                print(step_detail)
+                
+                steps.append({
+                    "action": name,
+                    "detail": step_detail,
+                    "args": args
+                })
+                
+                if name in tool_map:
+                    try:
+                        result = tool_map[name](**args)
+                    except Exception as e:
+                        result = f"Error executing tool: {e}"
+                else:
+                    result = f"Error: Tool '{name}' not found."
+                    
+                response_parts.append(
+                    content_types.to_part(
+                        content_types.protos.Part(
+                            function_response=content_types.protos.FunctionResponse(
+                                name=name,
+                                response={"result": result}
+                            )
+                        )
+                    )
+                )
+                
+            chat_history.append({
+                "role": "user",
+                "parts": response_parts
+            })
+            
+            # Simple safety sleep for Gemini free tier
+            import time
+            time.sleep(1.0)
+            
+        except Exception as ex:
+            print(f"Agent loop error: {ex}")
+            break
+            
+    final_answer = ""
+    # Look back for the final text response from the model
+    # We scan chat history backwards to find the last assistant message
+    for msg in reversed(chat_history):
+        role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", "")
+        if role == "model":
+            parts_text = []
+            parts = msg.get("parts") if isinstance(msg, dict) else getattr(msg, "parts", [])
+            for p in parts:
+                text = p.get("text") if isinstance(p, dict) else getattr(p, "text", "")
+                if text:
+                    parts_text.append(text)
+            if parts_text:
+                final_answer = "\n".join(parts_text)
+                break
+                
+    if not final_answer:
+        # Fallback if chat_history check failed, with safe checks to prevent ValueError
+        has_text = False
+        if 'response' in locals() and response:
+            try:
+                if hasattr(response, 'candidates') and response.candidates:
+                    content = response.candidates[0].content
+                    if hasattr(content, "parts") and content.parts:
+                        for p in content.parts:
+                            if hasattr(p, "text") and p.text:
+                                has_text = True
+                                break
+            except Exception:
+                pass
+        
+        if has_text:
+            try:
+                final_answer = response.text.strip()
+            except Exception:
+                final_answer = "The AI assistant is temporarily rate-limited or quota exceeded. Please wait a minute and try again."
+        else:
+            final_answer = "The AI assistant is temporarily rate-limited or quota exceeded. Please wait a minute and try again."
+        
+    # Extract sources:
+    sources = []
+    # 1. Direct match database references
+    mentioned_companies = extract_mentioned_companies(query)
     seen_links = set()
-    for s in sources:
-        if s['link'] not in seen_links:
-            seen_links.add(s['link'])
-            unique_sources.append(s)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    for c in mentioned_companies:
+        link = f"/#/company/{c['id']}"
+        if link not in seen_links:
+            seen_links.add(link)
+            sources.append({
+                "type": "database_profile",
+                "title": f"{c['name']} Profile",
+                "link": link
+            })
+            
+        # Also grab their news items
+        news_items = cursor.execute("SELECT headline, url FROM news_items WHERE company_id = ? LIMIT 2", (c['id'],)).fetchall()
+        for n in news_items:
+            if n['url'] not in seen_links:
+                seen_links.add(n['url'])
+                sources.append({
+                    "type": "news_article",
+                    "title": f"News: {n['headline']}",
+                    "link": n['url']
+                })
+    conn.close()
+    
+    # 2. Extract external links from response text
+    import re
+    links = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', final_answer)
+    for title, url in links:
+        if url not in seen_links:
+            seen_links.add(url)
+            sources.append({
+                "type": "web_link",
+                "title": title,
+                "link": url
+            })
             
     return {
-        "answer": response.text.strip(),
-        "sources": unique_sources
+        "answer": final_answer,
+        "sources": sources,
+        "steps": steps
     }

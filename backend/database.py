@@ -110,6 +110,27 @@ def init_db():
         FOREIGN KEY (company_id) REFERENCES companies (id) ON DELETE CASCADE
     );
     """)
+
+    # 7. Processed news URLs table (Free Tier optimization)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS processed_news_urls (
+        url TEXT PRIMARY KEY,
+        is_relevant INTEGER,
+        summary TEXT,
+        checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    
+    # Dynamic column addition for companies table if they don't exist
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN ingestion_source TEXT DEFAULT 'CSV Seed';")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN confidence_score INTEGER DEFAULT 100;")
+    except sqlite3.OperationalError:
+        pass
     
     conn.commit()
     conn.close()
@@ -224,8 +245,8 @@ def add_company(data):
         INSERT INTO companies (
             name, country, ai_category, seg_tags, germany_presence,
             company_type, use_cases, customers, funding, revenue,
-            maturity, deployment_evidence, website
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            maturity, deployment_evidence, website, ingestion_source, confidence_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get('name'),
             data.get('country'),
@@ -239,7 +260,9 @@ def add_company(data):
             data.get('revenue'),
             data.get('maturity'),
             data.get('deployment_evidence'),
-            data.get('website')
+            data.get('website'),
+            data.get('ingestion_source', 'Manual Admin'),
+            data.get('confidence_score', 100)
         ))
         conn.commit()
         new_id = cursor.lastrowid
@@ -262,7 +285,8 @@ def update_company(company_id, data):
     for k, v in data.items():
         if k in ['name', 'country', 'ai_category', 'seg_tags', 'germany_presence',
                  'company_type', 'use_cases', 'customers', 'funding', 'revenue',
-                 'maturity', 'deployment_evidence', 'website', 'embedding']:
+                 'maturity', 'deployment_evidence', 'website', 'embedding',
+                 'ingestion_source', 'confidence_score']:
             fields.append(f"{k} = ?")
             params.append(v)
             
@@ -430,3 +454,26 @@ def get_all_embeddings():
             
     conn.close()
     return embeddings
+
+def add_processed_url(url, is_relevant, summary):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+        INSERT OR REPLACE INTO processed_news_urls (url, is_relevant, summary)
+        VALUES (?, ?, ?)
+        """, (url, 1 if is_relevant else 0, summary))
+        conn.commit()
+    except Exception as e:
+        print(f"Error caching processed URL: {e}")
+    finally:
+        conn.close()
+
+def get_processed_url(url):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    row = cursor.execute("SELECT is_relevant, summary FROM processed_news_urls WHERE url = ?", (url,)).fetchone()
+    conn.close()
+    if row:
+        return {"is_relevant": bool(row['is_relevant']), "summary": row['summary']}
+    return None
