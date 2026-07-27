@@ -437,20 +437,35 @@ def ask_ai(query):
         "trigger_company_discovery": trigger_company_discovery
     }
     
+    # Pre-retrieve local database context to optimize API requests
+    local_context = query_local_knowledge_base(query)
+    
+    # Initialize steps with the pre-retrieved query to ensure test assertion compatibility and UI tracking
+    steps = [{
+        "action": "query_local_knowledge_base",
+        "detail": "Pre-retrieved local database and vector store context to minimize LLM API requests.",
+        "args": {"search_query": query}
+    }]
+    
     system_instruction = (
         "You are 'Ask AI', the advanced agentic intelligence assistant of the AI Atlas platform.\n"
         "You help users analyze companies, F&B sectors, problems, and ROI benchmarks.\n"
         "You have access to tools to search the local database/vector store, search the web, or trigger company discovery.\n\n"
+        "LOCAL KNOWLEDGE BASE CONTEXT:\n"
+        f"{local_context}\n\n"
         "CRITICAL RULES:\n"
         "1. Exact Row Grounding: For specific profile attributes of database companies (funding, revenue, maturity, website, customers, use cases), "
-        "you MUST query the local knowledge base first. Your final answer must match database values with 100% round-trip fidelity. Do not invent or approximate.\n"
-        "2. General Knowledge / Web Search: If the query is general or refers to companies/facts not in the local database, "
+        "your final answer must match database values with 100% round-trip fidelity. Do not invent or approximate.\n"
+        "2. Use Preloaded Context First: We have already pre-retrieved the local knowledge base context above. "
+        "If the user query can be fully answered using this local context, you MUST answer it immediately in your first response without calling any tools. "
+        "Only call tools like `query_web_search` or `trigger_company_discovery` if the required information is not present in the preloaded context.\n"
+        "3. General Knowledge / Web Search: If the query is general or refers to companies/facts not in the local database and not in the preloaded context, "
         "use `query_web_search` to find relevant info. Clearly mention that the answer is based on external web research.\n"
-        "3. Action Execution: If the user asks you to discover new companies, find new startups, or scan a new sector, "
+        "4. Action Execution: If the user asks you to discover new companies, find new startups, or scan a new sector, "
         "call `trigger_company_discovery` to run the discovery engine. Summarize what companies were automatically ingested vs ignored.\n"
-        "4. Citations: Always provide markdown links. For companies in our database, format as `[Company Name](/#/company/ID)` (e.g. `[GEA Group AG](/#/company/2)`). "
+        "5. Citations: Always provide markdown links. For companies in our database, format as `[Company Name](/#/company/ID)` (e.g. `[GEA Group AG](/#/company/2)`). "
         "For news or web links, cite their exact URLs.\n"
-        "5. Professional Presentation: Synthesize answers clearly in professional English. Use tables/bullet points for comparative parameters."
+        "6. Professional Presentation: Synthesize answers clearly in professional English. Use tables/bullet points for comparative parameters."
     )
     
     from google.generativeai.types import content_types
@@ -460,7 +475,6 @@ def ask_ai(query):
         {"role": "user", "parts": [query]}
     ]
     
-    steps = []
     max_iterations = 5
     
     for i in range(max_iterations):
@@ -492,6 +506,8 @@ def ask_ai(query):
                 name = call.name
                 args = dict(call.args)
                 
+                # Check if we should skip logging query_local_knowledge_base if we already pre-retrieved it,
+                # but if the model generated it again, we execute it anyway and log it.
                 step_detail = f"Invoked `{name}` with arguments: {json.dumps(args)}"
                 print(step_detail)
                 
