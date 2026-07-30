@@ -85,7 +85,7 @@ def discover_companies(sector, country):
         )
         
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.0-flash",
+            model_name="models/gemini-2.5-flash",
             tools=[google_search_tool]
         )
         

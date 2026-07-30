@@ -74,7 +74,7 @@ def evaluate_article(company_name, headline, snippet):
     base_delay = 10
     for attempt in range(max_retries):
         try:
-            model = genai.GenerativeModel("models/gemini-2.0-flash")
+            model = genai.GenerativeModel("models/gemini-2.5-flash")
             response = model.generate_content(
                 prompt,
                 generation_config={"response_mime_type": "application/json"}

@@ -27,7 +27,7 @@ def test_agent_local_grounding():
 
 def test_agent_general_query():
     print("\n=== Test 2: General Query / Web Search ===")
-    query = "Briefly explain the role of AI in bakery processing lines in general."
+    query = "Briefly explain the role of AI in aerospace manufacturing in general."
     res = rag_service.ask_ai(query)
     
     print(f"Query: {query}")

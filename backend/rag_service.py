@@ -394,7 +394,7 @@ def query_web_search(search_query: str) -> str:
             google_search=types.protos.Tool.GoogleSearch()
         )
         model = genai.GenerativeModel(
-            model_name="models/gemini-2.0-flash",
+            model_name="models/gemini-2.5-flash",
             tools=[google_search_tool]
         )
         prompt = (
@@ -480,7 +480,7 @@ def ask_ai(query):
     for i in range(max_iterations):
         try:
             model = genai.GenerativeModel(
-                model_name="models/gemini-2.0-flash",
+                model_name="models/gemini-2.5-flash",
                 tools=list(tool_map.values()),
                 system_instruction=system_instruction
             )
