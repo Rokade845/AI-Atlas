@@ -645,6 +645,14 @@ async function handleChatSubmit(e) {
         if (res.ok) {
             const data = await res.json();
             renderChatMessage(data.answer, 'bot', data.sources, data.steps);
+            
+            // Check if discovery tool was run during the chat and update UI lists/logs
+            const ranDiscovery = data.steps && data.steps.some(s => s.action === 'trigger_company_discovery');
+            if (ranDiscovery) {
+                await loadCompanies();
+                renderAutoIngestedLogs();
+                renderAdminCompaniesList();
+            }
         } else {
             renderChatMessage('Sorry, I encountered an error answering your question.', 'bot error');
         }
