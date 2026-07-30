@@ -121,11 +121,31 @@ def run_auto_discovery(sector, country="Germany"):
     candidates = res.get("candidates", [])
     ingested_count = 0
     
-    from database import add_company
+    from database import add_company, get_db_connection
     from news_service import fetch_news_for_company
     from rag_service import build_faiss_index
     
+    def sanitize_field(val):
+        if isinstance(val, list):
+            return ", ".join(str(x) for x in val)
+        if isinstance(val, dict):
+            return json.dumps(val)
+        if val is None:
+            return ""
+        return str(val).strip()
+
+    def sanitize_seg_tags(val):
+        if isinstance(val, list):
+            return ",".join(str(x).strip() for x in val)
+        if val is None:
+            return ""
+        return str(val).strip()
+        
     for cand in candidates:
+        name = sanitize_field(cand.get("name"))
+        if not name:
+            continue
+            
         score = cand.get("confidence_score", 0)
         # Handle string fallback cases if model outputs text
         if isinstance(score, str):
@@ -137,21 +157,30 @@ def run_auto_discovery(sector, country="Germany"):
                 score = 50
                 
         if score >= 90:
-            print(f"Auto-ingesting high confidence candidate ({score}%): {cand['name']}")
+            # Check if company already exists by name first to avoid false ingestion count reporting
+            conn = get_db_connection()
+            existing = conn.execute("SELECT id FROM companies WHERE name = ?", (name,)).fetchone()
+            conn.close()
+            
+            if existing:
+                print(f"Candidate '{name}' already exists in database. Skipping auto-ingestion.")
+                continue
+                
+            print(f"Auto-ingesting high confidence candidate ({score}%): {name}")
             company_data = {
-                "name": cand.get("name"),
-                "country": cand.get("country"),
-                "ai_category": cand.get("ai_category"),
-                "seg_tags": cand.get("seg_tags"),
-                "germany_presence": cand.get("germany_presence"),
-                "company_type": cand.get("company_type"),
-                "use_cases": cand.get("use_cases"),
-                "customers": cand.get("customers"),
-                "funding": cand.get("funding"),
-                "revenue": cand.get("revenue"),
-                "maturity": cand.get("maturity"),
-                "deployment_evidence": cand.get("deployment_evidence"),
-                "website": cand.get("website"),
+                "name": name,
+                "country": sanitize_field(cand.get("country")),
+                "ai_category": sanitize_field(cand.get("ai_category")),
+                "seg_tags": sanitize_seg_tags(cand.get("seg_tags")),
+                "germany_presence": sanitize_field(cand.get("germany_presence")),
+                "company_type": sanitize_field(cand.get("company_type")),
+                "use_cases": sanitize_field(cand.get("use_cases")),
+                "customers": sanitize_field(cand.get("customers")),
+                "funding": sanitize_field(cand.get("funding")),
+                "revenue": sanitize_field(cand.get("revenue")),
+                "maturity": sanitize_field(cand.get("maturity")),
+                "deployment_evidence": sanitize_field(cand.get("deployment_evidence")),
+                "website": sanitize_field(cand.get("website")),
                 "ingestion_source": "Auto-Discovered",
                 "confidence_score": score
             }
@@ -161,10 +190,10 @@ def run_auto_discovery(sector, country="Germany"):
                 ingested_count += 1
                 
                 # Fetch initial news
-                print(f"Fetching news for auto-ingested company: {cand['name']}")
+                print(f"Fetching news for auto-ingested company: {name}")
                 fetch_news_for_company(new_id, max_results=3)
             except Exception as e:
-                print(f"Error auto-ingesting company {cand['name']}: {e}")
+                print(f"Error auto-ingesting company {name}: {e}")
                 
     if ingested_count > 0:
         print(f"Successfully auto-ingested {ingested_count} companies. Rebuilding FAISS index...")
